@@ -1,21 +1,234 @@
 use bevy::prelude::*;
 use std::collections::{HashMap, VecDeque};
 
+use bevy::color::Srgba;
+use serde::Deserialize;
+use std::fs;
+
 // --- 常量配置 ---
 const TILE_SIZE: f32 = 40.0;
 const SIM_TICK_RATE: f64 = 20.0; // 逻辑帧率 20 TPS
 const BELT_SPEED: f32 = 0.5; // items per second
 const BUFFER_CAPACITY: u32 = 50; // 机器缓存上限
 
-// --- 基础枚举与类型 ---
+// ==========================================
+// 1. JSON 反序列化用的中间结构 (Raw Data)
+// ==========================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Component)]
+#[derive(Deserialize, Debug, Clone)]
+struct RecipeItem {
+    item: String,
+    count: u32,
+}
+
+#[derive(Deserialize, Debug)]
+struct RawRecipe {
+    inputs: Vec<RecipeItem>,
+    outputs: Vec<RecipeItem>,
+    time: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct RawItem {
+    id: String,
+    color: String,
+    #[serde(default)]
+    description: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct RawMachine {
+    id: String,
+    width: u32,
+    length: u32,   // ✅ 使用 length
+    color: String,
+    layout: Vec<String>, // ["111000222"]
+    recipes: Vec<RawRecipe>,
+}
+
+// ==========================================
+// 2. 游戏运行时用的原型结构 (Runtime Data)
+// ==========================================
+
+#[derive(Debug, Clone)]
+struct ItemPrototype {
+    id: String,
+    color: Color,
+    description: String,
+}
+
+#[derive(Debug, Clone)]
+struct Recipe {
+    inputs: Vec<RecipeItem>,
+    outputs: Vec<RecipeItem>,
+    time: f32,
+}
+
+#[derive(Debug, Clone)]
+struct MachinePrototype {
+    id: String,
+    width: u32,
+    length: u32, // ✅ 运行时也叫 length
+    // layout[y][x] -> 
+    // y 范围是 0..width (行数)
+    // x 范围是 0..length (每行长度)
+    layout: Vec<Vec<PortType>>, 
+    color: Color,
+    recipes: Vec<Recipe>,
+}
+
+#[derive(Resource, Default)]
+struct PrototypeLibrary {
+    machines: HashMap<String, MachinePrototype>,
+    items: HashMap<String, ItemPrototype>,
+}
+
+// --- D. 基础枚举与类型 ---
+
+// 必须 derive Deserialize 才能从 TOML 字符串 "North" 自动转换
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)] 
 enum Direction {
     North,
     East,
     South,
     West,
 }
+
+// --- E. 场景配置结构 (Scenario Config) ---
+
+#[derive(Deserialize)]
+struct ScenarioMachineData {
+    proto_id: String, // 机器原型 ID, 如 "refining_unit"
+    x: i32,
+    y: i32,
+    #[serde(default = "default_direction")] // 可选字段，默认 North
+    dir: Direction, 
+}
+
+#[derive(Deserialize)]
+struct ScenarioBeltData {
+    x: i32,
+    y: i32,
+    in_dir: Direction,  // 流入方向
+    out_dir: Direction, // 流出方向
+}
+
+#[derive(Deserialize)]
+struct ScenarioItemData {
+    proto_id: String, // 物品原型 ID
+    x: i32,
+    y: i32,
+    progress: f32,    // 0.0 - 1.0
+}
+
+// --- F. 场景文件根结构 (scenario.toml) ---
+
+#[derive(Deserialize)]
+struct ScenarioConfig {
+    // 使用 Option 是为了允许文件里某一部分完全为空
+    machines: Option<Vec<ScenarioMachineData>>,
+    belts: Option<Vec<ScenarioBeltData>>,
+    items: Option<Vec<ScenarioItemData>>,
+}
+
+// 辅助函数：提供默认方向
+fn default_direction() -> Direction {
+    Direction::North
+}
+
+
+// 辅助函数
+fn parse_hex(hex: &str) -> Color {
+    let clean_hex = hex.trim_start_matches('#');
+    match Srgba::hex(clean_hex) {
+        Ok(srgba) => Color::from(srgba),
+        Err(_) => {
+            warn!("颜色解析失败: {}, 回退到白色", hex);
+            Color::WHITE
+        }
+    }
+}
+
+// ✅ 核心加载函数 (修正版)
+// ✅ 核心加载函数 (增强版)
+fn load_config(mut lib: ResMut<PrototypeLibrary>) {
+    // --- Items 部分 ---
+    let items_path = "assets/items.json";
+    match fs::read_to_string(items_path) {
+        Ok(content) => {
+            let raw_items: Vec<RawItem> = serde_json::from_str(&content).expect("Items JSON 格式错误");
+            for raw in raw_items {
+                lib.items.insert(raw.id.clone(), ItemPrototype {
+                    id: raw.id,
+                    color: parse_hex(&raw.color),
+                    description: raw.description,
+                });
+            }
+            info!("Items loaded: {}", lib.items.len());
+        },
+        Err(e) => error!("❌ 无法读取 items.json: {}", e), // 👈 报错提示
+    }
+
+    // --- Machines 部分 ---
+    let machines_path = "assets/machines.json";
+    match fs::read_to_string(machines_path) {
+        Ok(content) => {
+            // 使用 match 处理 JSON 解析错误，避免直接 panic 且无提示
+            match serde_json::from_str::<Vec<RawMachine>>(&content) {
+                Ok(raw_machines) => {
+                    for raw in raw_machines {
+                        // 1. 获取掩码字符串
+                        if let Some(mask_str) = raw.layout.first() {
+                            let chars: Vec<char> = mask_str.chars().collect();
+                            let expected_len = (raw.width * raw.length) as usize;
+                            
+                            if chars.len() != expected_len {
+                                error!("❌ 机器 [{}] 布局错误: width({}) * length({}) != layout长度({})", 
+                                    raw.id, raw.width, raw.length, chars.len());
+                                continue; 
+                            }
+
+                            // 2. 解析 Layout
+                            let mut layout_matrix = Vec::new();
+                            for row_chars in chars.chunks(raw.length as usize).rev() {
+                                let mut row = Vec::new();
+                                for &char in row_chars {
+                                    row.push(match char {
+                                        '1' => PortType::Input,
+                                        '2' => PortType::Output,
+                                        _ => PortType::None,
+                                    });
+                                }
+                                layout_matrix.push(row);
+                            }
+
+                            let recipes = raw.recipes.into_iter().map(|r| Recipe {
+                                inputs: r.inputs,
+                                outputs: r.outputs,
+                                time: r.time,
+                            }).collect();
+
+                            lib.machines.insert(raw.id.clone(), MachinePrototype {
+                                id: raw.id,
+                                width: raw.width,
+                                length: raw.length,
+                                layout: layout_matrix,
+                                color: parse_hex(&raw.color),
+                                recipes,
+                            });
+                        } else {
+                            error!("❌ 机器 [{}] Layout 为空", raw.id);
+                        }
+                    }
+                    info!("Machines loaded: {}", lib.machines.len());
+                },
+                Err(e) => error!("❌ machines.json JSON 解析失败: {}", e),
+            }
+        },
+        Err(e) => error!("❌ 无法读取 machines.json: {}", e), // 👈 报错提示
+    }
+}
+
 
 impl Direction {
     fn to_ivec2(&self) -> IVec2 {
@@ -100,6 +313,7 @@ struct Machine {
     
     // 轮询输出游标
     next_output_idx: usize,
+    current_recipe_idx: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -118,84 +332,124 @@ struct GridMap {
     entities: HashMap<IVec2, Entity>,
 }
 
-// 机器原型数据 (只读)
-#[derive(Resource, Default)]
-struct PrototypeLibrary {
-    machines: HashMap<String, MachinePrototype>,
-}
-
-struct MachinePrototype {
-    id: String,
-    width: u32,
-    height: u32,
-    layout: Vec<Vec<PortType>>, // 原始布局 [y][x]
-    base_time: f32, // 生产耗时
-    // 简化：为了 Demo，这里硬编码一个简单的配方
-    input_req: String, 
-    output_prod: String,
-}
 
 // ----------------------------------------------------------------------
 // 🔧 核心算法：局部坐标 -> 世界坐标旋转变换
 // ----------------------------------------------------------------------
 
 impl MachinePrototype {
-    // 获取旋转后的端口列表，返回 [(世界坐标, 端口朝向)]
-    // 端口朝向定义：端口"看着"的方向。例如 Input 在顶部，朝向就是 North。
-    fn get_ports_with_facing(
+    /// 获取机器在指定旋转方向下的 (宽, 高)
+    /// 返回值: (X轴跨度, Y轴跨度)
+    pub fn get_size(&self, dir: Direction) -> IVec2 {
+        match dir {
+            // 南北朝向：保持原样 (Length 是 X, Width 是 Y)
+            Direction::North | Direction::South => IVec2::new(self.length as i32, self.width as i32),
+            // 东西朝向：宽高互换
+            Direction::East | Direction::West => IVec2::new(self.width as i32, self.length as i32),
+        }
+    }
+
+    /// 获取旋转后的所有端口信息
+    /// 返回: Vec<(世界坐标, 端口朝向)>
+    pub fn get_ports_with_facing(
         &self, 
-        origin: IVec2,         // 机器原点 (GridPos)
-        machine_dir: Direction,// 机器当前的旋转
-        port_type: PortType    // Input 或 Output
+        origin: IVec2,   // 机器左下角的 GridPos
+        facing: Direction, // 机器本身的朝向
+        target_type: PortType // 只获取 Input 或 Output
     ) -> Vec<(IVec2, Direction)> {
-        
-        let mut result = Vec::new();
-        
-        // 1. 确定当前旋转下的尺寸 (用于坐标变换)
-        // 0/180度保持原样，90/270度宽高互换
-        let (effective_w, effective_h) = match machine_dir {
-            Direction::North | Direction::South => (self.width, self.height),
-            Direction::East | Direction::West => (self.height, self.width),
-        };
+        let mut ports = Vec::new();
 
-        for y in 0..self.height {
-            for x in 0..self.width {
-                // 找到对应类型的端口
-                if self.layout[y as usize][x as usize] == port_type {
+        // 遍历原始 Layout 矩阵
+        // y 是行索引 (0..width), x 是列索引 (0..length)
+        for (y, row) in self.layout.iter().enumerate() {
+            for (x, &p_type) in row.iter().enumerate() {
+                if p_type == target_type {
+                    let local_pos = IVec2::new(x as i32, y as i32);
+
+                    // 1. 计算旋转后的局部坐标 offset
+                    let rotated_offset = self.rotate_point(local_pos, facing);
+
+                    // 2. 计算世界坐标
+                    let world_pos = origin + rotated_offset;
+
+                    // 3. 计算端口的"流向" (用于箭头显示和连接逻辑)
+                    // 例如：顶部的 Input 端口，其流向应该是 pointing South (进入机器)
+                    // 或者 Output 端口，其流向 pointing North (流出机器)
+                    // 这里我们计算"朝外"的方向
+                    let outward_dir = self.calculate_outward_dir(x, y, facing);
                     
-                    // A. 计算局部原始朝向 (假设没旋转时)
-                    // 规则：位于边缘的端口朝向外部
-                    let local_facing = if y as u32 == self.height - 1 { Direction::North }
-                                  else if y == 0 { Direction::South }
-                                  else if x == 0 { Direction::West }
-                                  else if x as u32 == self.width - 1 { Direction::East }
-                                  else { Direction::North }; // 默认 fallback
-
-                    // B. 计算旋转后的朝向
-                    let world_facing = match machine_dir {
-                        Direction::North => local_facing,
-                        Direction::East  => local_facing.rotate_clockwise(),
-                        Direction::South => local_facing.opposite(),
-                        Direction::West  => local_facing.rotate_counter_clockwise(),
-                    };
-
-                    // C. 计算旋转后的坐标偏移 (相对于 origin)
-                    // 假设局部原点 (0,0) 在左下角
-                    let (rot_x, rot_y) = match machine_dir {
-                        Direction::North => (x as i32, y as i32),
-                        // 顺时针 90: (x, y) -> (y, W-1-x)  <-- 注意这里 W 是原始宽度
-                        Direction::East  => (y as i32, self.width as i32 - 1 - x as i32),
-                        // 180: (x, y) -> (W-1-x, H-1-y)
-                        Direction::South => (self.width as i32 - 1 - x as i32, self.height as i32 - 1 - y as i32),
-                        // 270: (x, y) -> (H-1-y, x)
-                        Direction::West  => (self.height as i32 - 1 - y as i32, x as i32),
-                    };
-
-                    result.push((origin + IVec2::new(rot_x, rot_y), world_facing));
+                    ports.push((world_pos, outward_dir));
                 }
             }
         }
-        result
+        ports
+    }
+
+    /// 内部辅助：计算点在旋转后的位置
+    /// 假设旋转中心是网格的 (0,0) 到 (L, W) 区域的整体旋转
+    fn rotate_point(&self, p: IVec2, dir: Direction) -> IVec2 {
+        let l = self.length as i32;
+        let w = self.width as i32;
+        let (x, y) = (p.x, p.y);
+
+        // 顺时针 (Clockwise) 旋转逻辑
+        match dir {
+            Direction::North => IVec2::new(x, y),
+            // 北(x,y) 转 东 -> x变成y轴, y变成倒转的x轴 (适应新尺寸 W x L)
+            Direction::East  => IVec2::new(y, l - 1 - x), 
+            // 北(x,y) 转 南 -> 倒转x, 倒转y (尺寸 L x W)
+            Direction::South => IVec2::new(l - 1 - x, w - 1 - y),
+            // 北(x,y) 转 西 -> y变成倒转x, x变成y (尺寸 W x L)
+            Direction::West  => IVec2::new(w - 1 - y, x),
+        }
+    }
+
+    /// 内部辅助：计算端口原本是朝哪边的，并加上机器旋转
+    fn calculate_outward_dir(&self, x: usize, y: usize, machine_facing: Direction) -> Direction {
+        // 1. 判断端口在原始布局的哪个边缘
+        let l = self.length as usize;
+        let w = self.width as usize;
+
+        let local_dir = if y == w - 1 {
+            Direction::North // 在顶部
+        } else if x == l - 1 {
+            Direction::East  // 在右侧
+        } else if y == 0 {
+            Direction::South // 在底部
+        } else if x == 0 {
+            Direction::West  // 在左侧
+        } else {
+            Direction::North // 默认 (内部端口)
+        };
+
+        // 2. 将边缘方向叠加机器的旋转
+        self.rotate_direction(local_dir, machine_facing)
+    }
+
+    /// 旋转方向枚举
+    fn rotate_direction(&self, original: Direction, rotation: Direction) -> Direction {
+        // 简单的枚举映射
+        match rotation {
+            Direction::North => original,
+            Direction::East => match original {
+                Direction::North => Direction::East,
+                Direction::East => Direction::South,
+                Direction::South => Direction::West,
+                Direction::West => Direction::North,
+            },
+            Direction::South => match original {
+                Direction::North => Direction::South,
+                Direction::East => Direction::West,
+                Direction::South => Direction::North,
+                Direction::West => Direction::East,
+            },
+            Direction::West => match original {
+                Direction::North => Direction::West,
+                Direction::East => Direction::North,
+                Direction::South => Direction::East,
+                Direction::West => Direction::South,
+            },
+        }
     }
 }
 
@@ -227,12 +481,13 @@ fn main() {
         // 设置固定时间步长 (20 TPS)
         .insert_resource(Time::<Fixed>::from_hz(SIM_TICK_RATE))
         
-        .add_systems(Startup, (setup_prototypes, setup_world).chain())
+        .add_systems(Startup, (load_config, setup_world).chain())
         
         // 核心仿真循环 (FixedUpdate)
         .add_systems(FixedUpdate, (
             tick_belts_movement,      // 1. 传送带内部移动
-            tick_transport_handshake, // 2. 传送带/机器交互 (拓扑传输)
+            tick_belt_to_belt, // 2. 传送带/机器交互 (拓扑传输)
+            tick_belt_to_machine,
             tick_machines_process,    // 3. 机器生产逻辑
             tick_machines_output,     // 4. 机器输出
         ).chain())
@@ -247,25 +502,6 @@ fn main() {
 
 // --- 系统实现 ---
 
-// 1. 初始化原型数据 (模拟从文件加载)
-fn setup_prototypes(mut lib: ResMut<PrototypeLibrary>) {
-    // 定义一个 3x3 的精炼炉: 上进下出
-    let layout_str = vec![
-        vec![PortType::Output, PortType::Output, PortType::Output], // y=0 (底部)
-        vec![PortType::None,   PortType::None,   PortType::None],   // y=1
-        vec![PortType::Input,  PortType::Input,  PortType::Input],  // y=2 (顶部)
-    ];
-    
-    lib.machines.insert("refining_unit".to_string(), MachinePrototype {
-        id: "refining_unit".to_string(),
-        width: 3,
-        height: 3,
-        layout: layout_str,
-        base_time: 2.0,
-        input_req: "Ore".to_string(),
-        output_prod: "Iron".to_string(),
-    });
-}
 
 // 2. 初始化世界 (放置几个测试物体)
 fn setup_world(
@@ -295,7 +531,7 @@ fn setup_world(
             ..default()
         },
         Transform::default(),
-        Item { item_type: "Ore".to_string(), visual_progress: 0.0 },
+        Item { item_type: "Amethyst Ore".to_string(), visual_progress: 0.0 },
     )).id();
     
     // 把物品挂载到 (0,0) 传送带的第一个路径上
@@ -425,7 +661,7 @@ fn spawn_machine(
     proto_id: String
 ) {
     let proto = proto_lib.machines.get(&proto_id).unwrap();
-    let machine_size = IVec2::new(proto.width as i32, proto.height as i32);
+    let machine_size = IVec2::new(proto.width as i32, proto.length as i32);
 
     // 1. 生成机器本身 (父实体)
     let machine_ent = commands.spawn((
@@ -447,6 +683,7 @@ fn spawn_machine(
             input_buffer: HashMap::new(),
             output_buffer: HashMap::new(),
             next_output_idx: 0,
+            current_recipe_idx: 0,
         },
         // 确保它可见
         Visibility::Visible,
@@ -456,7 +693,7 @@ fn spawn_machine(
     // 2. 添加子实体 (指示器)
     .with_children(|parent| {
         // 遍历 Layout，寻找端口
-        for y in 0..proto.height {
+        for y in 0..proto.length {
             for x in 0..proto.width {
                 let port_type = proto.layout[y as usize][x as usize];
                 
@@ -470,7 +707,7 @@ fn spawn_machine(
                     // 右上角 (2,2) -> 局部 (40, 40)
                     
                     let center_offset_x = (proto.width as f32 - 1.0) / 2.0;
-                    let center_offset_y = (proto.height as f32 - 1.0) / 2.0;
+                    let center_offset_y = (proto.length as f32 - 1.0) / 2.0;
                     
                     let local_x = (x as f32 - center_offset_x) * TILE_SIZE;
                     let local_y = (y as f32 - center_offset_y) * TILE_SIZE;
@@ -504,7 +741,7 @@ fn spawn_machine(
     
     // 注册到 GridMap
     // (简单的 3x3 占位注册)
-    for y in 0..proto.height {
+    for y in 0..proto.length {
         for x in 0..proto.width {
             let offset = IVec2::new(x as i32, y as i32);
             map.entities.insert(pos + offset, machine_ent);
@@ -539,107 +776,129 @@ fn tick_belts_movement(
 }
 
 // 4. 传输握手逻辑 (最复杂的部分)
-fn tick_transport_handshake(
-    mut commands: Commands,
-    map: Res<GridMap>,
-    proto_lib: Res<PrototypeLibrary>,
+fn tick_belt_to_belt(
+    // 只需要查询传送带
     mut belt_query: Query<(Entity, &GridPos, &mut ConveyorBelt)>,
-    mut machine_query: Query<(Entity, &GridPos, &mut Machine)>,
+    map: Res<GridMap>,
 ) {
-    let mut transfers: Vec<(Entity, IVec2, usize)> = Vec::new();
-
-    // 1. 收集传输请求
+    // Phase 1: 收集传输请求
+    let mut transfers = Vec::new();
     for (entity, pos, belt) in belt_query.iter() {
         for (idx, path) in belt.paths.iter().enumerate() {
             if path.item.is_some() && path.progress >= 1.0 {
                 let target_pos = pos.0 + path.output_dir.to_ivec2();
-                transfers.push((entity, target_pos, idx));
+                // 只有当目标位置有实体时才记录
+                if let Some(&target_ent) = map.entities.get(&target_pos) {
+                    transfers.push((entity, target_ent, idx));
+                }
             }
         }
     }
 
-    // 2. 执行传输
-    for (src_entity, target_pos, src_path_idx) in transfers {
-        
-        // 预先检查：源物品是否存在（避免之后的复杂逻辑扑空）
-        // 这里只获取 item entity id，不需要借用 component
-        let item_entity_opt = if let Ok((_, _, belt)) = belt_query.get(src_entity) {
-             belt.paths[src_path_idx].item
-        } else { None };
+    // Phase 2: 执行传输
+    for (src_ent, target_ent, src_idx) in transfers {
+        // 排除自环
+        if src_ent == target_ent { continue; }
 
-        if item_entity_opt.is_none() { continue; }
-        let item_entity = item_entity_opt.unwrap();
+        // 同时获取两个传送带的可变引用
+        if let Ok([mut src, mut target]) = belt_query.get_many_mut([src_ent, target_ent]) {
+            let src_belt = &src.2;
+            // 再次检查源物品是否存在 (可能被前面的逻辑处理了)
+            if let Some(item_ent) = src_belt.paths[src_idx].item {
+                let out_dir = src_belt.paths[src_idx].output_dir;
 
-        if let Some(&target_ent) = map.entities.get(&target_pos) {
-            
-            // --- 情况 I: 目标是传送带 (使用 get_many_mut 解决借用冲突) ---
-            if belt_query.contains(target_ent) {
-                // 确保源和目标不是同一个实体（虽然逻辑上不太可能，但 Rust 需要保证）
-                if src_entity != target_ent {
-                    if let Ok([mut src_entry, mut target_entry]) = belt_query.get_many_mut([src_entity, target_ent]) {
-                        // 解构出我们需要的组件
-                        // get_many_mut 返回的是数组，顺序对应输入的 entity 顺序
-                        let src_belt = &src_entry.2; // 先只读引用，获取方向
-                        let belt_out_dir = src_belt.paths[src_path_idx].output_dir;
-                        
-                        // 获取目标传送带的可变引用
-                        let target_belt = &mut target_entry.2;
-                        let target_path = &mut target_belt.paths[0]; // 假设第一条路径
-
-                        // 核心判定
-                        if target_path.item.is_none() && target_path.input_dir == belt_out_dir.opposite() {
-                            // 1. 转移物品所有权
-                            target_path.item = Some(item_entity);
-                            target_path.progress = 0.0;
-                            
-                            // 2. 清除源头 (因为 src_entry 也是 Mut 的，所以可以直接改)
-                            src_entry.2.paths[src_path_idx].item = None;
-                        }
+                // 检查目标传送带 (假设只有一条路径)
+                let target_belt = &mut target.2;
+                if let Some(target_path) = target_belt.paths.first_mut() {
+                    // 逻辑：目标是空的 + 方向匹配
+                    // (target_path.input_dir 指的是它接收的方向，out_dir 是来源方向，两者应该是"同向"流动的)
+                    // Bevy 坐标系下，如果 A(North)->B，则 A.out=North。
+                    // B 接收从南边来的货，所以 B.in 应该是 North (代表它向北流) 或者 South (代表它接收来自南边的货)?
+                    // *修正*: 这里沿用你旧代码的逻辑: target.input == src.output.opposite()
+                    // 假设 input_dir 定义为 "Facing" (朝向)，那么面对面就是 opposite。
+                    if target_path.item.is_none() && target_path.input_dir == out_dir.opposite() {
+                        // 转移
+                        target_path.item = Some(item_ent);
+                        target_path.progress = 0.0;
+                        src.2.paths[src_idx].item = None;
                     }
                 }
             }
-            // --- 情况 II: 目标是机器 ---
-            else if let Ok((_, machine_pos, mut machine)) = machine_query.get_mut(target_ent) {
-                let proto = proto_lib.machines.get(&machine.prototype_id).unwrap();
-                
-                // 1. 获取源头流向
-                // 【关键修复】这里我们只读取 Direction (它是一个 Copy 类型)
-                // 读取完立刻结束借用，这样就不会和后面的 get_mut 冲突
-                let belt_out_dir = if let Ok((_, _, src_belt)) = belt_query.get(src_entity) {
-                    src_belt.paths[src_path_idx].output_dir
-                } else {
-                    continue; // 源头如果拿不到，就跳过
-                };
+        }
+    }
+}
 
-                // 2. 获取机器端口
-                let input_ports = proto.get_ports_with_facing(machine_pos.0, machine.direction, PortType::Input);
-                
-                let mut valid_port = false;
+fn tick_belt_to_machine(
+    mut commands: Commands,
+    // 两个查询分开，互不干扰
+    mut belt_query: Query<(&GridPos, &mut ConveyorBelt)>,
+    mut machine_query: Query<(&GridPos, &mut Machine)>,
+    // 物品查询 (用于配方检查)
+    item_query: Query<&Item>,
+    map: Res<GridMap>,
+    proto_lib: Res<PrototypeLibrary>,
+) {
+    // 直接遍历传送带 (因为不需要同时借用两个 Belt，所以直接 iter_mut 是安全的)
+    for (belt_pos, mut belt) in belt_query.iter_mut() {
+        for path in belt.paths.iter_mut() {
+            // 1. 检查是否有物品待传输
+            if let Some(item_ent) = path.item {
+                if path.progress >= 1.0 {
+                    let target_pos = belt_pos.0 + path.output_dir.to_ivec2();
+                    let belt_out_dir = path.output_dir;
 
-                // 3. 遍历端口寻找匹配
-                for (port_pos, port_facing) in input_ports {
-                    if port_pos == target_pos {
-                        if belt_out_dir == port_facing.opposite() {
-                            valid_port = true;
-                            break; 
+                    // 2. 检查目标是否是机器
+                    if let Some(target_ent) = map.entities.get(&target_pos) {
+                        if let Ok((m_pos, mut machine)) = machine_query.get_mut(*target_ent) {
+                            if let Some(proto) = proto_lib.machines.get(&machine.prototype_id) {
+                                
+                                // --- A. 端口位置与方向检查 ---
+                                let input_ports = proto.get_ports_with_facing(m_pos.0, machine.direction, PortType::Input);
+                                
+                                let mut is_valid = false;
+                                for (port_pos, port_facing) in input_ports {
+                                    // 坐标匹配 && 方向对冲 (Belt流出方向 == 端口朝外方向的反向)
+                                    if port_pos == target_pos && belt_out_dir == port_facing.opposite() {
+                                        is_valid = true;
+                                        break;
+                                    }
+                                }
+
+                                if !is_valid { continue; }
+
+                                // --- B. 配方与容量检查 ---
+                                if let Ok(item_cmp) = item_query.get(item_ent) {
+                                    if let Some(recipe) = proto.recipes.get(machine.current_recipe_idx) {
+                                        // 检查物品是否在配方需求中
+                                        if recipe.inputs.iter().any(|req| req.item == item_cmp.item_type) {
+                                            let current_count = machine.input_buffer.get(&item_cmp.item_type).copied().unwrap_or(0);
+                                            
+                                            // 简单的堆叠限制
+                                            if current_count < 50 {
+                                                // ✅ 成功接收
+                                                machine.input_buffer.insert(item_cmp.item_type.clone(), current_count + 1);
+                                                
+                                                // 销毁实体
+                                                commands.entity(item_ent).despawn();
+                                                
+                                                // 清空传送带
+                                                path.item = None;
+                                                // path.progress = 0.0; // 既然没了就不需要重置进度了，或者重置为0也可以
+                                            }
+                                        }else {
+                                            // 👇 新增调试日志：如果不匹配，打印出来
+                                            // 只有当距离足够近试图传输时才打印，防止刷屏
+                                            if path.progress >= 1.0 {
+                                                info!("拒绝接收: 机器配方需求 {:?}, 但传送带物品是 '{}'", 
+                                                    recipe.inputs.iter().map(|r| &r.item).collect::<Vec<_>>(), 
+                                                    item_cmp.item_type
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
-                }
-
-                if valid_port {
-                    let item_type = "Ore".to_string(); 
-                    let count = machine.input_buffer.get(&item_type).copied().unwrap_or(0);
-                    
-                    if count < BUFFER_CAPACITY {
-                        machine.input_buffer.insert(item_type, count + 1);
-                        
-                        // 清除源头 (此时 machine_query 的借用已经结束，可以安全地再次借用 belt_query)
-                        if let Ok((_, _, mut src_belt)) = belt_query.get_mut(src_entity) {
-                            src_belt.paths[src_path_idx].item = None;
-                        }
-                        
-                        commands.entity(item_entity).despawn();
-                        println!("机器严格接收物品成功！库存: {}", count + 1);
                     }
                 }
             }
@@ -648,48 +907,80 @@ fn tick_transport_handshake(
 }
 // 5. 机器生产逻辑
 fn tick_machines_process(
-    time: Res<Time>,
+    time: Res<Time<Fixed>>,
+    mut query: Query<(Entity, &mut Machine)>, // 加上 Entity 方便打印日志
     proto_lib: Res<PrototypeLibrary>,
-    mut machines: Query<&mut Machine>,
 ) {
     let dt = time.delta_secs();
 
-    for mut machine in machines.iter_mut() {
-        let proto = proto_lib.machines.get(&machine.prototype_id).unwrap();
-        
-        // 简化配方：1 Ore -> 1 Iron
-        let input_key = &proto.input_req;
-        let output_key = &proto.output_prod;
+    for (entity, mut machine) in query.iter_mut() {
+        if let Some(proto) = proto_lib.machines.get(&machine.prototype_id) {
+            // 获取配方
+            if let Some(recipe) = proto.recipes.get(machine.current_recipe_idx) {
+                
+                match machine.state {
+                    MachineState::Idle => {
+                        // --- 1. 检查原料 ---
+                        let mut can_craft = true;
+                        for input_req in &recipe.inputs {
+                            let current_count = machine.input_buffer.get(&input_req.item).copied().unwrap_or(0);
+                            if current_count < input_req.count {
+                                can_craft = false;
+                                break;
+                            }
+                        }
 
-        match machine.state {
-            MachineState::Idle => {
-                let input_count = machine.input_buffer.get(input_key).copied().unwrap_or(0);
-                if input_count >= 1 {
-                    // 开始生产
-                    machine.input_buffer.insert(input_key.clone(), input_count - 1);
-                    machine.state = MachineState::Working;
-                    machine.progress = 0.0;
-                }
-            },
-            MachineState::Working => {
-                machine.progress += dt;
-                if machine.progress >= proto.base_time {
-                    // 生产完成，尝试放入输出区
-                    let output_count = machine.output_buffer.get(output_key).copied().unwrap_or(0);
-                    if output_count < BUFFER_CAPACITY {
-                        machine.output_buffer.insert(output_key.clone(), output_count + 1);
-                        machine.state = MachineState::Idle; // 回到空闲
-                        println!("生产完成！产物库存: {}", output_count + 1);
-                    } else {
-                        machine.state = MachineState::OutputFull; // 堵塞
+                        // --- 2. 扣除原料 (安全版) ---
+                        if can_craft {
+                            for input_req in &recipe.inputs {
+                                // 👇 关键修复：不要用 unwrap()，使用 if let Some
+                                if let Some(current) = machine.input_buffer.get_mut(&input_req.item) {
+                                    if *current >= input_req.count {
+                                        *current -= input_req.count;
+                                    } else {
+                                        // 理论上不会发生，但防止崩溃
+                                        error!("逻辑错误: 机器 {:?} 原料 {} 显示足够但扣除时不足！", entity, input_req.item);
+                                    }
+                                } else {
+                                    // 理论上不会发生
+                                    error!("逻辑错误: 机器 {:?} 缺少原料 Key: {}", entity, input_req.item);
+                                }
+                            }
+                            
+                            machine.state = MachineState::Working;
+                            machine.progress = 0.0;
+                        }
+                    },
+                    
+                    MachineState::Working => {
+                        machine.progress += dt;
+                        
+                        if machine.progress >= recipe.time {
+                            // --- 3. 产出完成 ---
+                            for output_prod in &recipe.outputs {
+                                let current = machine.output_buffer.get(&output_prod.item).copied().unwrap_or(0);
+                                machine.output_buffer.insert(output_prod.item.clone(), current + output_prod.count);
+                            }
+
+                            // 检查堆积
+                            let is_output_full = machine.output_buffer.values().any(|&count| count >= 50);
+                            if is_output_full {
+                                machine.state = MachineState::OutputFull;
+                            } else {
+                                machine.state = MachineState::Idle;
+                                machine.progress = 0.0;
+                            }
+                        }
+                    },
+                    
+                    MachineState::OutputFull => {
+                        // 等待输出被拿走
+                        let is_output_full = machine.output_buffer.values().any(|&count| count >= 50);
+                        if !is_output_full {
+                            machine.state = MachineState::Idle;
+                            machine.progress = 0.0;
+                        }
                     }
-                }
-            },
-            MachineState::OutputFull => {
-                // 检查是否有空位了
-                let output_count = machine.output_buffer.get(output_key).copied().unwrap_or(0);
-                if output_count < BUFFER_CAPACITY {
-                    machine.state = MachineState::Working; // 恢复工作（实际上是恢复放入逻辑）
                 }
             }
         }
@@ -731,64 +1022,54 @@ fn sync_visuals(
 // 7. 机器输出逻辑 (Machine -> Belt)
 fn tick_machines_output(
     mut commands: Commands,
-    mut machines: Query<(&GridPos, &mut Machine)>,
-    // 注意：Query 返回的是 (Entity, &GridPos, &mut ConveyorBelt)
-    mut belts: Query<(Entity, &GridPos, &mut ConveyorBelt)>, 
+    mut machine_query: Query<(&GridPos, &mut Machine)>,
+    mut belt_query: Query<&mut ConveyorBelt>,
     map: Res<GridMap>,
     proto_lib: Res<PrototypeLibrary>,
 ) {
-    for (pos, mut machine) in machines.iter_mut() {
-        let proto = proto_lib.machines.get(&machine.prototype_id).unwrap();
-        let output_key = &proto.output_prod;
-
-        let count = machine.output_buffer.get(output_key).copied().unwrap_or(0);
-        if count > 0 {
-            // 1. 获取所有 Output 端口
-            let output_ports = proto.get_ports_with_facing(pos.0, machine.direction, PortType::Output);
+    for (m_pos, mut machine) in machine_query.iter_mut() {
+        if let Some(proto) = proto_lib.machines.get(&machine.prototype_id) {
             
-            if output_ports.is_empty() { continue; }
+            // 获取第一个非空的产物
+            // 👇 关键修复：分开获取 Key 和 Value，避免 borrow checker 冲突且不使用 unwrap
+            let target_item = machine.output_buffer.iter()
+                .find(|(_, &count)| count > 0)
+                .map(|(k, &c)| (k.clone(), c)); // Clone key and copy count
 
-            let idx = machine.next_output_idx % output_ports.len();
-            let (port_pos, port_facing) = output_ports[idx];
+            if let Some((item_id, count)) = target_item {
+                let output_ports = proto.get_ports_with_facing(m_pos.0, machine.direction, PortType::Output);
 
-            // 2. 喷射方向 = 端口朝向
-            let eject_dir = port_facing; 
-            let target_pos = port_pos + eject_dir.to_ivec2();
+                for (out_pos, _out_dir) in output_ports {
+                    if let Some(ent) = map.entities.get(&out_pos) {
+                        if let Ok(mut belt) = belt_query.get_mut(*ent) {
+                            // 简单的传送带检查
+                            if let Some(path) = belt.paths.first_mut() {
+                                if path.item.is_none() && path.progress < 0.1 {
+                                    
+                                    // 生成实体
+                                    let color = proto_lib.items.get(&item_id).map(|i| i.color).unwrap_or(Color::WHITE);
+                                    let item_ent = commands.spawn((
+                                        Sprite {
+                                            color,
+                                            custom_size: Some(Vec2::new(20.0, 20.0)),
+                                            ..default()
+                                        },
+                                        Transform::from_xyz(0.0, 0.0, 1.0),
+                                        Item { item_type: item_id.clone(), visual_progress: 0.0 },
+                                    )).id();
 
-            // 3. 检查目标
-            if let Some(target_ent) = map.entities.get(&target_pos) {
-                // 修正点：使用 get_mut 并解构 ((_, _, mut target_belt))
-                if let Ok((_, _, mut target_belt)) = belts.get_mut(*target_ent) {
-                    
-                    let target_path = &mut target_belt.paths[0];
-                    
-                    // 4. 严格方向检查：传送带 Input 必须等于 喷射方向.opposite()
-                    // 比如机器向南(South)喷射，传送带必须接受来自北(North)的物品 (即 Input=North)
-                    // 而 North == South.opposite()
-                    if target_path.input_dir == eject_dir.opposite() {
-                        
-                        if target_path.item.is_none() && target_path.progress < 0.1 {
-                            
-                            let item_ent = commands.spawn((
-                                Sprite {
-                                    color: Color::srgb(0.5, 0.5, 1.0),
-                                    custom_size: Some(Vec2::new(20.0, 20.0)),
-                                    ..default()
-                                },
-                                Transform::from_translation((port_pos.as_vec2() * TILE_SIZE).extend(1.0)), 
-                                Item { 
-                                    item_type: output_key.clone(), 
-                                    visual_progress: 0.0 
-                                },
-                            )).id();
+                                    // 放入传送带
+                                    path.item = Some(item_ent);
+                                    path.progress = 0.5;
 
-                            target_path.item = Some(item_ent);
-                            target_path.progress = 0.0; 
-                            
-                            machine.output_buffer.insert(output_key.clone(), count - 1);
-                            println!("机器严格输出成功 -> {:?}", target_pos);
-
-                            machine.next_output_idx = (machine.next_output_idx + 1) % output_ports.len();
+                                    // 扣除库存
+                                    // 👇 这里用 unwrap 是安全的，因为上面刚刚 find 过，但也可用 if let
+                                    if let Some(c) = machine.output_buffer.get_mut(&item_id) {
+                                        *c -= 1;
+                                    }
+                                    break; 
+                                }
+                            }
                         }
                     }
                 }

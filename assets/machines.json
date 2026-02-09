@@ -1,0 +1,166 @@
+[
+  {
+    "id": "refining_unit",
+    "width": 3,
+    "length": 3,
+    "color": "#3333CC",
+    "layout": ["111000222"],
+    "recipes": [
+      { "inputs": [{ "item": "Amethyst Ore", "count": 1 }], "outputs": [{ "item": "Amethyst Fiber", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Originium Ore", "count": 1 }], "outputs": [{ "item": "Origocrust", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Buckflower", "count": 1 }], "outputs": [{ "item": "Carbon", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium Ore", "count": 1 }], "outputs": [{ "item": "Ferrium", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Dense Carbon Powder", "count": 1 }], "outputs": [{ "item": "Stabilized Carbon", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Dense Origocrust Powder", "count": 1 }], "outputs": [{ "item": "Packed Origocrust", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Cryston Powder", "count": 1 }], "outputs": [{ "item": "Cryston Fiber", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Dense Ferrium Powder", "count": 1 }], "outputs": [{ "item": "Steel", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Sandleaf", "count": 1 }], "outputs": [{ "item": "Carbon", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Jincao", "count": 1 }], "outputs": [{ "item": "Carbon", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Yazhen", "count": 1 }], "outputs": [{ "item": "Carbon", "count": 2 }], "time": 2.0 }
+    ]
+  },
+  {
+    "id": "shredding_unit",
+    "width": 3,
+    "length": 3,
+    "color": "#3333CC",
+    "layout": ["111000222"],
+    "recipes": [
+      { "inputs": [{ "item": "Originium Ore", "count": 1 }], "outputs": [{ "item": "Originium Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Amethyst Fiber", "count": 1 }], "outputs": [{ "item": "Amethyst Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Carbon", "count": 1 }], "outputs": [{ "item": "Carbon Powder", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Origocrust", "count": 1 }], "outputs": [{ "item": "Origocrust Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Buckflower", "count": 1 }], "outputs": [{ "item": "Buckflower Powder", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Aketine", "count": 1 }], "outputs": [{ "item": "Aketine Powder", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium", "count": 1 }], "outputs": [{ "item": "Ferrium Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Sandleaf", "count": 1 }], "outputs": [{ "item": "Sandleaf Powder", "count": 3 }], "time": 2.0 },
+      { "inputs": [{ "item": "Citrome", "count": 1 }], "outputs": [{ "item": "Citrome Powder", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Jincao", "count": 1 }], "outputs": [{ "item": "Jincao Powder", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Yazhen", "count": 1 }], "outputs": [{ "item": "Yazhen Powder", "count": 2 }], "time": 2.0 }
+    ]
+  },
+  {
+    "id": "fitting_unit",
+    "width": 3,
+    "length": 3,
+    "color": "#3333CC",
+    "layout": ["111000222"],
+    "recipes": [
+      { "inputs": [{ "item": "Amethyst Fiber", "count": 1 }], "outputs": [{ "item": "Amethyst Part", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium", "count": 1 }], "outputs": [{ "item": "Ferrium Part", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Cryston Fiber", "count": 1 }], "outputs": [{ "item": "Cryston Part", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Steel", "count": 1 }], "outputs": [{ "item": "Steel Part", "count": 1 }], "time": 2.0 }
+    ]
+  },
+  {
+    "id": "moulding_unit",
+    "width": 3,
+    "length": 3,
+    "color": "#3333CC",
+    "layout": ["111000222"],
+    "recipes": [
+      { "inputs": [{ "item": "Amethyst Fiber", "count": 2 }], "outputs": [{ "item": "Amethyst Bottle", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium", "count": 2 }], "outputs": [{ "item": "Ferrium Bottle", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Cryston Fiber", "count": 2 }], "outputs": [{ "item": "Cryston Bottle", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Steel", "count": 2 }], "outputs": [{ "item": "Steel Bottle", "count": 1 }], "time": 2.0 }
+    ]
+  },
+  {
+    "id": "seed_picking_unit",
+    "width": 5,
+    "length": 5,
+    "color": "#3333CC",
+    "layout": ["1111100000000000000022222"],
+    "recipes": [
+      { "inputs": [{ "item": "Buckflower", "count": 1 }], "outputs": [{ "item": "Buckflower Seed", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Citrome", "count": 1 }], "outputs": [{ "item": "Citrome Seed", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Aketine", "count": 1 }], "outputs": [{ "item": "Aketine Seed", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Yazhen", "count": 1 }], "outputs": [{ "item": "Yazhen Seed", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Jincao", "count": 1 }], "outputs": [{ "item": "Jincao Seed", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Sandleaf", "count": 1 }], "outputs": [{ "item": "Sandleaf Seed", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Reed Rye", "count": 1 }], "outputs": [{ "item": "Reed Rye Seed", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Tartpepper", "count": 1 }], "outputs": [{ "item": "Tartpepper Seed", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Redjade Ginseng", "count": 1 }], "outputs": [{ "item": "Redjade Ginseng Seed", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Amber Rice", "count": 1 }], "outputs": [{ "item": "Amber Rice Seed", "count": 2 }], "time": 2.0 }
+    ]
+  },
+  {
+    "id": "planting_unit",
+    "width": 5,
+    "length": 5,
+    "color": "#3333CC",
+    "layout": ["1111100000000000000022222"],
+    "recipes": [
+      { "inputs": [{ "item": "Buckflower Seed", "count": 1 }], "outputs": [{ "item": "Buckflower", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Citrome Seed", "count": 1 }], "outputs": [{ "item": "Citrome", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Aketine Seed", "count": 1 }], "outputs": [{ "item": "Aketine", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Yazhen Seed", "count": 1 }, { "item": "Clean Water", "count": 1 }], "outputs": [{ "item": "Yazhen", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Jincao Seed", "count": 1 }, { "item": "Clean Water", "count": 1 }], "outputs": [{ "item": "Jincao", "count": 2 }], "time": 2.0 },
+      { "inputs": [{ "item": "Sandleaf Seed", "count": 1 }], "outputs": [{ "item": "Sandleaf", "count": 1 }], "time": 2.0 }
+    ]
+  },
+  {
+    "id": "gearing_unit",
+    "width": 4,
+    "length": 6,
+    "color": "#3333CC",
+    "layout": ["111111000000000000222222"],
+    "recipes": [
+      { "inputs": [{ "item": "Origocrust", "count": 5 }, { "item": "Amethyst Fiber", "count": 5 }], "outputs": [{ "item": "Amethyst Component", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Origocrust", "count": 10 }, { "item": "Ferrium", "count": 10 }], "outputs": [{ "item": "Ferrium Component", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Packed Origocrust", "count": 10 }, { "item": "Cryston Fiber", "count": 10 }], "outputs": [{ "item": "Cryston Component", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Xiranite", "count": 10 }, { "item": "Packed Origocrust", "count": 10 }], "outputs": [{ "item": "Xiranite Component", "count": 1 }], "time": 10.0 }
+    ]
+  },
+  {
+    "id": "filling_unit",
+    "width": 4,
+    "length": 6,
+    "color": "#3333CC",
+    "layout": ["111111000000000000222222"],
+    "recipes": [
+      { "inputs": [{ "item": "Amethyst Bottle", "count": 5 }, { "item": "Citrome Powder", "count": 5 }], "outputs": [{ "item": "Canned Citrome C", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Amethyst Bottle", "count": 5 }, { "item": "Buckflower Powder", "count": 5 }], "outputs": [{ "item": "Buck Capsule C", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Ferrium Bottle", "count": 10 }, { "item": "Buckflower Powder", "count": 10 }], "outputs": [{ "item": "Buck Capsule B", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Ferrium Bottle", "count": 10 }, { "item": "Citrome Powder", "count": 10 }], "outputs": [{ "item": "Canned Citrome B", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Steel Bottle", "count": 10 }, { "item": "Ground Buckflower Powder", "count": 10 }], "outputs": [{ "item": "Buck Capsule A", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Steel Bottle", "count": 10 }, { "item": "Ground Citrome Powder", "count": 10 }], "outputs": [{ "item": "Canned Citrome A", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Ferrium Bottle", "count": 1 }, { "item": "Clean Water", "count": 1 }], "outputs": [{ "item": "Ferrium Bottle (Clean Water)", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium Bottle", "count": 1 }, { "item": "Jincao Solution", "count": 1 }], "outputs": [{ "item": "Ferrium Bottle (Jincao Solution)", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium Bottle", "count": 1 }, { "item": "Yazhen Solution", "count": 1 }], "outputs": [{ "item": "Ferrium Bottle (Yazhen Solution)", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium Bottle", "count": 1 }, { "item": "Liquid Xiranite", "count": 1 }], "outputs": [{ "item": "Ferrium Bottle (Liquid Xiranite)", "count": 1 }], "time": 2.0 }
+    ]
+  },
+  {
+    "id": "packaging_unit",
+    "width": 4,
+    "length": 6,
+    "color": "#3333CC",
+    "layout": ["111111000000000000222222"],
+    "recipes": [
+      { "inputs": [{ "item": "Amethyst Part", "count": 5 }, { "item": "Originium Powder", "count": 10 }], "outputs": [{ "item": "LC Valley Battery", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Amethyst Part", "count": 5 }, { "item": "Aketine Powder", "count": 1 }], "outputs": [{ "item": "Industrial Explosive", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Ferrium Part", "count": 10 }, { "item": "Originium Powder", "count": 15 }], "outputs": [{ "item": "SC Valley Battery", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Steel Part", "count": 10 }, { "item": "Dense Originium Powder", "count": 15 }], "outputs": [{ "item": "HC Valley Battery", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Xiranite", "count": 5 }, { "item": "Dense Originium Powder", "count": 15 }], "outputs": [{ "item": "LC Wuling Battery", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Ferrium Bottle (Jincao Solution)", "count": 5 }, { "item": "Ferrium Part", "count": 10 }], "outputs": [{ "item": "Jincao Drink", "count": 1 }], "time": 10.0 },
+      { "inputs": [{ "item": "Ferrium Bottle (Yazhen Solution)", "count": 5 }, { "item": "Ferrium Part", "count": 10 }], "outputs": [{ "item": "Yazhen Syringe C", "count": 1 }], "time": 10.0 }
+    ]
+  },
+  {
+    "id": "grinding_unit",
+    "width": 4,
+    "length": 6,
+    "color": "#3333CC",
+    "layout": ["111111000000000000222222"],
+    "recipes": [
+      { "inputs": [{ "item": "Buckflower Powder", "count": 2 }, { "item": "Sandleaf Powder", "count": 1 }], "outputs": [{ "item": "Ground Buckflower Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Citrome Powder", "count": 2 }, { "item": "Sandleaf Powder", "count": 1 }], "outputs": [{ "item": "Ground Citrome Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Carbon Powder", "count": 2 }, { "item": "Sandleaf Powder", "count": 1 }], "outputs": [{ "item": "Dense Carbon Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Originium Powder", "count": 2 }, { "item": "Sandleaf Powder", "count": 1 }], "outputs": [{ "item": "Dense Originium Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Origocrust Powder", "count": 2 }, { "item": "Sandleaf Powder", "count": 1 }], "outputs": [{ "item": "Dense Origocrust Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Amethyst Powder", "count": 2 }, { "item": "Sandleaf Powder", "count": 1 }], "outputs": [{ "item": "Cryston Powder", "count": 1 }], "time": 2.0 },
+      { "inputs": [{ "item": "Ferrium Powder", "count": 2 }, { "item": "Sandleaf Powder", "count": 1 }], "outputs": [{ "item": "Dense Ferrium Powder", "count": 1 }], "time": 2.0 }
+    ]
+  }
+]

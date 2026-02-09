@@ -1,0 +1,24 @@
+[package]
+name = "factory_sim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# # 使用 Bevy 0.18, 仅启用 2D 必要特性以加快编译
+# bevy = { version = "0.18", default-features = false, features = [
+#     "bevy_core_pipeline",
+#     "bevy_render",
+#     "bevy_sprite",
+#     "bevy_text",
+#     "bevy_ui",
+#     "bevy_window",
+#     "bevy_winit",
+#     "x11",
+#     "wayland",
+#     "tonemapping_luts",
+#     "zstd_rust"] }
+
+bevy = "0.18"
+# 👇 【新增】显式指定 zstd 后端为纯 Rust 版本
+# zstd = "0.13"
+rand = "0.8"

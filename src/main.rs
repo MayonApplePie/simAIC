@@ -151,45 +151,54 @@ fn parse_hex(hex: &str) -> Color {
 
 // ✅ 核心加载函数 (修正版)
 fn load_config(mut lib: ResMut<PrototypeLibrary>) {
-    // --- Items 部分 ---
+    // --- Items 部分 (保持不变) ---
     let items_path = "assets/items.json";
     match fs::read_to_string(items_path) {
         Ok(content) => {
-            let raw_items: Vec<RawItem> = serde_json::from_str(&content).expect("Items JSON 格式错误");
-            for raw in raw_items {
-                lib.items.insert(raw.id.clone(), ItemPrototype {
-                    id: raw.id,
-                    color: parse_hex(&raw.color),
-                    description: raw.description,
-                });
+            match serde_json::from_str::<Vec<RawItem>>(&content) {
+                Ok(raw_items) => {
+                    for raw in raw_items {
+                        lib.items.insert(raw.id.clone(), ItemPrototype {
+                            id: raw.id,
+                            color: parse_hex(&raw.color),
+                            description: raw.description,
+                        });
+                    }
+                    info!("✅ Items loaded: {}", lib.items.len());
+                },
+                Err(e) => error!("❌ items.json 格式解析失败: {}", e),
             }
-            info!("Items loaded: {}", lib.items.len());
         },
-        Err(e) => error!("❌ 无法读取 items.json: {}", e), // 👈 报错提示
+        Err(e) => error!("❌ 无法读取 items.json: {}", e),
     }
 
     // --- Machines 部分 ---
     let machines_path = "assets/machines.json";
     match fs::read_to_string(machines_path) {
         Ok(content) => {
-            // 使用 match 处理 JSON 解析错误，避免直接 panic 且无提示
             match serde_json::from_str::<Vec<RawMachine>>(&content) {
                 Ok(raw_machines) => {
                     for raw in raw_machines {
-                        // 1. 获取掩码字符串
                         if let Some(mask_str) = raw.layout.first() {
                             let chars: Vec<char> = mask_str.chars().collect();
-                            let expected_len = (raw.width * raw.length) as usize;
                             
+                            // 1. 验证数据完整性
+                            let expected_len = (raw.width * raw.length) as usize;
                             if chars.len() != expected_len {
-                                error!("❌ 机器 [{}] 布局错误: width({}) * length({}) != layout长度({})", 
-                                    raw.id, raw.width, raw.length, chars.len());
+                                error!("❌ 机器 [{}] 数据不匹配: 定义 {}x{}={}格, 但字符串有{}格", 
+                                    raw.id, raw.width, raw.length, expected_len, chars.len());
                                 continue; 
                             }
 
                             // 2. 解析 Layout
                             let mut layout_matrix = Vec::new();
-                            for row_chars in chars.chunks(raw.length as usize).rev() {
+                            
+                            // 🔥 核心修改：按照你的定义 🔥
+                            // "Length 代表宽度" -> 所以每一行的长度(步长)应该是 raw.length
+                            let stride = raw.length as usize; 
+                            if stride == 0 { continue; }
+
+                            for row_chars in chars.chunks(stride).rev() {
                                 let mut row = Vec::new();
                                 for &char in row_chars {
                                     row.push(match char {
@@ -209,8 +218,14 @@ fn load_config(mut lib: ResMut<PrototypeLibrary>) {
 
                             lib.machines.insert(raw.id.clone(), MachinePrototype {
                                 id: raw.id,
-                                width: raw.width,
-                                length: raw.length,
+                                
+                                // 🔥 这里进行逻辑映射 🔥
+                                // 代码里的 .width (X轴) = JSON 里的 length
+                                width: raw.length,   
+                                
+                                // 代码里的 .length (Y轴/高度) = JSON 里的 width
+                                length: raw.width,   
+                                
                                 layout: layout_matrix,
                                 color: parse_hex(&raw.color),
                                 recipes,
@@ -219,12 +234,12 @@ fn load_config(mut lib: ResMut<PrototypeLibrary>) {
                             error!("❌ 机器 [{}] Layout 为空", raw.id);
                         }
                     }
-                    info!("Machines loaded: {}", lib.machines.len());
+                    info!("✅ Machines loaded: {}", lib.machines.len());
                 },
                 Err(e) => error!("❌ machines.json JSON 解析失败: {}", e),
             }
         },
-        Err(e) => error!("❌ 无法读取 machines.json: {}", e), // 👈 报错提示
+        Err(e) => error!("❌ 无法读取 machines.json: {}", e),
     }
 }
 
@@ -934,67 +949,57 @@ fn tick_belt_to_machine(
             if let Some(item_ent) = path.item {
                 if path.progress >= 1.0 {
                     let target_pos = belt_pos.0 + path.output_dir.to_ivec2();
-                    let belt_out_dir = path.output_dir;
-
+                    
                     // 1. 检查目标位置是否有实体
                     if let Some(target_ent) = map.entities.get(&target_pos) {
+                        
                         // 2. 检查目标是否是机器
                         if let Ok((m_pos, mut machine)) = machine_query.get_mut(*target_ent) {
                             if let Some(proto) = proto_lib.machines.get(&machine.prototype_id) {
                                 
-                                // --- Debug: 找到了机器，开始检查端口 ---
+                                // 获取机器所有的 Input 端口位置
                                 let input_ports = proto.get_ports_with_facing(m_pos.0, machine.direction, PortType::Input);
                                 
-                                let mut is_port_valid = false;
-                                for (port_pos, port_facing) in &input_ports {
-                                    // 坐标匹配 && 方向对冲 (Belt流出方向 == 端口朝外方向的反向)
-                                    if *port_pos == target_pos && belt_out_dir == port_facing.opposite() {
-                                        is_port_valid = true;
-                                        break;
-                                    }
-                                }
+                                // 🔥🔥🔥 关键修改：只检查位置，忽略端口朝向 🔥🔥🔥
+                                // 只要传送带的目标位置 (target_pos) 等于机器的任意一个 Input 端口坐标，就允许传输。
+                                // 这完美解决了角落端口只能接受一个方向的问题。
+                                let is_port_valid = input_ports.iter().any(|(pos, _dir)| *pos == target_pos);
 
                                 if !is_port_valid {
-                                    // ⚠️ 失败原因 1: 端口不对
-                                    // 防止刷屏，只在特定的 tick 打印，或者你可以暂时忍受刷屏
-                                    info!("⛔ 拒绝接收 [端口错误]: 传送带在 {:?} 向 {:?} 输出，但机器 {:?} 的入口位于 {:?} (朝向 {:?})", 
-                                        target_pos, belt_out_dir, machine.prototype_id, 
-                                        input_ports.iter().map(|(p, _)| p).collect::<Vec<_>>(),
-                                        input_ports.iter().map(|(_, d)| d).collect::<Vec<_>>()
-                                    );
+                                    // 目标是机器，但指的不是机器的“嘴”，而是机器的“墙”
+                                    // debug!("⛔ 拒绝: 撞墙了");
                                     continue; 
                                 }
 
-                                // --- Debug: 端口正确，开始检查配方 ---
+                                // --- 3. 检查配方和库存 ---
                                 if let Ok(item_cmp) = item_query.get(item_ent) {
-                                    // 获取当前配方
                                     if let Some(recipe) = proto.recipes.get(machine.current_recipe_idx) {
                                         
-                                        // 检查物品是否在配方需求中
+                                        // A. 配方匹配检查
                                         let is_needed = recipe.inputs.iter().any(|req| req.item == item_cmp.item_type);
 
                                         if is_needed {
                                             let current_count = machine.input_buffer.get(&item_cmp.item_type).copied().unwrap_or(0);
                                             
-                                            // 检查库存容量
+                                            // B. 库存容量检查
                                             if current_count < BUFFER_CAPACITY {
-                                                // ✅ 成功接收 (这是原来的逻辑)
+                                                // ✅ 成功接收
                                                 machine.input_buffer.insert(item_cmp.item_type.clone(), current_count + 1);
+                                                
+                                                // 销毁传送带上的物品实体
                                                 commands.entity(item_ent).despawn();
                                                 path.item = None;
-                                                info!("✅ 成功接收: {}", item_cmp.item_type);
+                                                
+                                                info!("✅ 机器 [{}] 成功吃掉: {}", machine.prototype_id, item_cmp.item_type);
                                             } else {
-                                                // ⚠️ 失败原因 3: 库存已满
-                                                info!("⛔ 拒绝接收 [库存已满]: {} 库存: {}", item_cmp.item_type, current_count);
+                                                // 库存已满 (静默失败，等待消耗)
                                             }
                                         } else {
-                                            // ⚠️ 失败原因 2: 配方不匹配
-                                            // 打印出机器当前想要什么，以及传送带上是什么
-                                            let wanted: Vec<String> = recipe.inputs.iter().map(|r| r.item.clone()).collect();
-                                            info!("⛔ 拒绝接收 [配方不配]: 机器需要 {:?}, 但传送带物品是 '{}'", wanted, item_cmp.item_type);
+                                            // 物品不对 (调试时可以打印，正式版通常静默堵塞)
+                                            // debug!("⛔ 拒绝: 机器不需要 {}", item_cmp.item_type);
                                         }
                                     } else {
-                                        info!("⛔ 拒绝接收 [无配方]: 机器当前没有设置配方 (idx={})", machine.current_recipe_idx);
+                                        // 机器没有设置配方
                                     }
                                 }
                             }

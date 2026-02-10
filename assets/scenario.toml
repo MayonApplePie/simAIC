@@ -5,28 +5,155 @@
 [[machines]]
 proto_id = "refining_unit"
 x = 0
-y = 0
+y = -1
 dir = "North"
+
+
+[[machines]]
+proto_id = "fitting_unit"
+x = 2
+y = -5
+dir = "West"
+
+[[machines]]
+proto_id = "refining_unit"
+x = -4
+y = -5
+dir = "West"
+
+[[machines]]
+proto_id = "packaging_unit"
+x = 6
+y = -5
+dir = "West"
+
+
 
 # === 2. 放置传送带 ===
 # 在机器下方 (0, -2) 放置一个向北流动的传送带，对着机器入口
 [[belts]]
 x = 0
-y = -2
-in_dir = "South"  # 接收来自南边的货
-out_dir = "North" # 向北输送 (进入机器)
+y = 2
+in_dir = "North"  # 接收来自南边的货
+out_dir = "South" # 向北输送 (进入机器)
 
 # 在机器下方更远一点 (0, -3)
 [[belts]]
 x = 0
-y = -3
-in_dir = "South"
-out_dir = "North"
+y = 3
+in_dir = "North"
+out_dir = "South"
 
+[[belts]]
+x = 0
+y = -2
+in_dir = "North"
+out_dir = "South"
+
+[[belts]]
+x = 0
+y = -3
+in_dir = "West"
+out_dir = "East"
+[[belts]]
+x = 1
+y = -3
+in_dir = "West"
+out_dir = "East"
+
+[[belts]]
+x = 1
+y = -5
+in_dir = "West"
+out_dir = "East"
+[[belts]]
+x = 0
+y = -5
+in_dir = "West"
+out_dir = "East"
+[[belts]]
+x = -1
+y = -5
+in_dir = "West"
+out_dir = "East"
+
+[[belts]]
+x = 5
+y = -5
+in_dir = "West"
+out_dir = "East"
+
+[[belts]]
+x = 6
+y = -5
+in_dir = "West"
+out_dir = "East"
+
+[[belts]]
+x = -5
+y = -5
+in_dir = "West"
+out_dir = "East"
+[[belts]]
+x = -6
+y = -5
+in_dir = "West"
+out_dir = "East"
+
+[[belts]]
+x = 5
+y = -1
+in_dir = "West"
+out_dir = "East"
+[[belts]]
+x = 6
+y = -1
+in_dir = "West"
+out_dir = "East"
 # === 3. 放置初始物品 ===
 # 在 (0, -3) 的传送带上放一个矿石，测试它能不能流进机器
+
+[[belts]]
+x = 11
+y = -3
+in_dir = "West"
+out_dir = "East"
+
+
 [[items]]
 proto_id = "Amethyst Ore"
 x = 0
-y = -3
+y = 3
 progress = 0.5
+
+[[items]]
+proto_id = "Amethyst Ore"
+x = 0
+y = 2
+progress = 0.5
+
+[[items]]
+proto_id = "Amethyst Ore"
+x = -5
+y = -5
+progress = 0.5
+
+[[items]]
+proto_id = "Amethyst Ore"
+x = -6
+y = -5
+progress = 0.5
+
+[[items]]
+proto_id = "Originium Powder"
+x = 6
+y = -1
+progress = 0.5
+
+[[items]]
+proto_id = "Originium Powder"
+x = 5
+y = -1
+progress = 0.5
+
+

@@ -8,10 +8,10 @@ use std::fs;
 // 必须 derive Deserialize 才能从 TOML 字符串 "North" 自动转换
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
-    North,
-    East,
-    South,
-    West,
+    North = 0,
+    East = 1,
+    South = 2,
+    West = 3,
 }
 
 impl Default for Direction {
@@ -69,47 +69,59 @@ pub struct GridTransform {
 }
 
 // --- 工具：网格数学计算 ---
-struct GridMath;
+pub struct GridMath;
 
 impl GridMath {
-    // 将机器的局部端口坐标转换为世界坐标和方向
+    /// 将机器的局部端口直接转换为世界坐标和绝对方向
     pub fn transform_port(
         entity_pos: IVec2,
         entity_facing: Direction,
         entity_size: IVec2,
-        local_offset: IVec2,
-        relative_side: RelativeSide,
+        port_local_offset: IVec2,
+        port_local_dir: Direction,
     ) -> (IVec2, Direction) {
+        
+        // 1. 根据机器朝向，旋转端口的相对坐标偏移量
         let rotated_offset = Self::rotate_point(
-            local_offset,
+            port_local_offset,
             entity_facing,
             entity_size,
         );
         let world_pos = entity_pos + rotated_offset;
 
-        let local_dir = relative_side.to_local_direction();
-        let world_dir = Self::rotate_direction(local_dir, entity_facing);
+        // 2. 根据机器朝向，旋转端口的朝向 (叠加旋转量)
+        let world_dir = Self::rotate_direction(port_local_dir, entity_facing);
 
         (world_pos, world_dir)
     }
 
-    // 旋转点 (0,0) based, size 用于确定旋转中心
+    /// 旋转坐标点 (基于 0,0，size 用于确定旋转边界)
+    /// 这里的逻辑完美兼容你的设定，保持不变
     pub fn rotate_point(p: IVec2, dir: Direction, size: IVec2) -> IVec2 {
         let (x, y) = (p.x, p.y);
         let (w, h) = (size.x, size.y);
+        
         match dir {
             Direction::North => IVec2::new(x, y),
-            Direction::East => IVec2::new(y, w - 1 - x), // 宽变高，高变宽
+            Direction::East  => IVec2::new(y, w - 1 - x), // 宽变高，高变宽
             Direction::South => IVec2::new(w - 1 - x, h - 1 - y),
-            Direction::West => IVec2::new(h - 1 - y, x),
+            Direction::West  => IVec2::new(h - 1 - y, x),
         }
     }
 
+    /// 优化后的方向旋转计算
+    /// 直接利用底层 u8 进行取模运算，无需创建数组或遍历
     pub fn rotate_direction(original: Direction, rotation: Direction) -> Direction {
-        let dirs = [Direction::North, Direction::East, Direction::South, Direction::West];
-        let idx_orig = dirs.iter().position(|&d| d == original).unwrap();
-        let idx_rot = dirs.iter().position(|&d| d == rotation).unwrap();
-        dirs[(idx_orig + idx_rot) % 4]
+        // 因为我们上面把 Direction 定义为了 0,1,2,3，直接 as u8 即可
+        let val = (original as u8 + rotation as u8) % 4;
+        
+        match val {
+            0 => Direction::North,
+            1 => Direction::East,
+            2 => Direction::South,
+            3 => Direction::West,
+            _ => unreachable!(), // 模 4 的结果永远在 0-3 之间
+        }
     }
 }
 
